@@ -14,7 +14,7 @@ export const signup = async (req, res, next) => {
     email === '' ||
     password === ''
   ) {
-    next(errorHandler(400, 'All fields are required'));
+    return next(errorHandler(400, 'All fields are required'));
   }
 
   const hashedPassword = bcryptjs.hashSync(password, 10);
@@ -29,6 +29,14 @@ export const signup = async (req, res, next) => {
     await newUser.save();
     res.json('Signup successful');
   } catch (error) {
+    if (error.code === 11000) {
+      return next(
+        errorHandler(
+          400,
+          'This email is already registered. Please continue signing in with Google instead.'
+        )
+      );
+    }
     next(error);
   }
 };
@@ -37,7 +45,7 @@ export const signin = async (req, res, next) => {
   const { email, password } = req.body;
 
   if (!email || !password || email === '' || password === '') {
-    next(errorHandler(400, 'All fields are required'));
+    return next(errorHandler(400, 'All fields are required'));
   }
 
   try {
@@ -69,6 +77,7 @@ export const signin = async (req, res, next) => {
 
 export const google = async (req, res, next) => {
   const { email, name, googlePhotoUrl } = req.body;
+
   try {
     const user = await User.findOne({ email });
     if (user) {
