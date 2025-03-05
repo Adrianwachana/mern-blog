@@ -18,33 +18,49 @@ export default function UpdatePost() {
   const [file, setFile] = useState(null);
   const [imageUploadProgress, setImageUploadProgress] = useState(null);
   const [imageUploadError, setImageUploadError] = useState(null);
-  const [formData, setFormData] = useState({});
+  const [formData, setFormData] = useState({
+    title: '',
+    content: '',
+    category: 'uncategorized',
+    image: ''
+  });
   const [publishError, setPublishError] = useState(null);
   const { postId } = useParams();
-
+  
   const navigate = useNavigate();
-    const { currentUser } = useSelector((state) => state.user);
+  const { currentUser } = useSelector((state) => state.user);
 
   useEffect(() => {
-    try {
-      const fetchPost = async () => {
+    const fetchPost = async () => {
+      try {
         const res = await fetch(`/api/post/getposts?postId=${postId}`);
         const data = await res.json();
+        
         if (!res.ok) {
           console.log(data.message);
           setPublishError(data.message);
           return;
         }
-        if (res.ok) {
+        
+        if (data.posts && data.posts.length > 0) {
           setPublishError(null);
-          setFormData(data.posts[0]);
+          setFormData({
+            ...data.posts[0],
+            title: data.posts[0].title || '',
+            content: data.posts[0].content || '',
+            category: data.posts[0].category || 'uncategorized',
+            image: data.posts[0].image || ''
+          });
+        } else {
+          setPublishError('Post not found');
         }
-      };
-
-      fetchPost();
-    } catch (error) {
-      console.log(error.message);
-    }
+      } catch (error) {
+        console.log(error.message);
+        setPublishError('Error fetching post');
+      }
+    };
+    
+    fetchPost();
   }, [postId]);
 
   const handleUpdloadImage = async () => {
@@ -58,6 +74,7 @@ export default function UpdatePost() {
       const fileName = new Date().getTime() + '-' + file.name;
       const storageRef = ref(storage, fileName);
       const uploadTask = uploadBytesResumable(storageRef, file);
+      
       uploadTask.on(
         'state_changed',
         (snapshot) => {
@@ -73,7 +90,7 @@ export default function UpdatePost() {
           getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
             setImageUploadProgress(null);
             setImageUploadError(null);
-            setFormData({ ...formData, image: downloadURL });
+            setFormData((prevData) => ({ ...prevData, image: downloadURL }));
           });
         }
       );
@@ -83,9 +100,16 @@ export default function UpdatePost() {
       console.log(error);
     }
   };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      // Additional checks to ensure formData and _id exist
+      if (!formData || !formData._id) {
+        setPublishError('Invalid post data');
+        return;
+      }
+
       const res = await fetch(`/api/post/updatepost/${formData._id}/${currentUser._id}`, {
         method: 'PUT',
         headers: {
@@ -93,20 +117,27 @@ export default function UpdatePost() {
         },
         body: JSON.stringify(formData),
       });
+      
       const data = await res.json();
+      
       if (!res.ok) {
-        setPublishError(data.message);
+        setPublishError(data.message || 'Failed to update post');
         return;
       }
-
-      if (res.ok) {
-        setPublishError(null);
-        navigate(`/post/${data.slug}`);
-      }
+      
+      setPublishError(null);
+      navigate(`/post/${data.slug}`);
     } catch (error) {
-      setPublishError('Something went wrong');
+      console.error('Update error:', error);
+      setPublishError('Something went wrong while updating the post');
     }
   };
+
+  // If post is not loaded yet, return a loading indicator
+  if (!formData || !formData._id) {
+    return <div className='text-center my-7'>Loading...</div>;
+  }
+
   return (
     <div className='p-3 max-w-3xl mx-auto min-h-screen'>
       <h1 className='text-center text-3xl my-7 font-semibold'>Update post</h1>
@@ -136,7 +167,6 @@ export default function UpdatePost() {
             <option value='politics'>politics</option>
             <option value='finance'>finance</option>
             <option value='food'>food</option>
-            <option value='finance'>finance</option>
           </Select>
         </div>
         <div className='flex gap-4 items-center justify-between border-4 border-teal-500 border-dotted p-3'>
